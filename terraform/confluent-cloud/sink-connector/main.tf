@@ -8,24 +8,24 @@ terraform {
 }
 
 provider "confluent" {
-  cloud_api_key    = var.confluent_cloud_api_key
-  cloud_api_secret = var.confluent_cloud_api_secret
+  cloud_api_key    = var.ccloud_api_key
+  cloud_api_secret = var.ccloud_api_secret
 }
 
-resource "confluent_environment" "staging" {
-  display_name = "Staging"
+resource "confluent_environment" "customer" {
+  display_name = var.ccloud_environment_name
 }
 
 # Update the config to use a cloud provider and region of your choice.
 # https://registry.terraform.io/providers/confluentinc/confluent/latest/docs/resources/confluent_kafka_cluster
 resource "confluent_kafka_cluster" "basic" {
-  display_name = "inventory"
-  availability = "SINGLE_ZONE"
-  cloud        = "AWS"
-  region       = "us-east-2"
+  display_name = var.ccloud_cluster_name
+  availability = var.ccloud_cluster_azs
+  cloud        = var.ccloud_cluster_provider
+  region       = var.ccloud_cluster_region
   basic {}
   environment {
-    id = confluent_environment.staging.id
+    id = confluent_environment.customer.id
   }
 }
 
@@ -57,7 +57,7 @@ resource "confluent_api_key" "app-manager-kafka-api-key" {
     kind        = confluent_kafka_cluster.basic.kind
 
     environment {
-      id = confluent_environment.staging.id
+      id = confluent_environment.customer.id
     }
   }
 
@@ -105,7 +105,7 @@ resource "confluent_api_key" "app-consumer-kafka-api-key" {
     kind        = confluent_kafka_cluster.basic.kind
 
     environment {
-      id = confluent_environment.staging.id
+      id = confluent_environment.customer.id
     }
   }
 }
@@ -148,7 +148,7 @@ resource "confluent_api_key" "app-producer-kafka-api-key" {
     kind        = confluent_kafka_cluster.basic.kind
 
     environment {
-      id = confluent_environment.staging.id
+      id = confluent_environment.customer.id
     }
   }
 }
@@ -367,7 +367,7 @@ resource "confluent_kafka_acl" "app-connector-read-on-connect-lcc-group" {
 
 resource "confluent_connector" "sink" {
   environment {
-    id = confluent_environment.staging.id
+    id = confluent_environment.customer.id
   }
   kafka_cluster {
     id = confluent_kafka_cluster.basic.id

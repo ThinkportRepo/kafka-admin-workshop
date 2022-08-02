@@ -3,7 +3,7 @@
 module "ec2_public" {
   source  = "terraform-aws-modules/ec2-instance/aws"
   version = "4.1.1"
-  for_each = toset(["0", "1"])
+  for_each = local.instance_set
 
   name                   = "ccloud-bastion-host-${each.key}"
   ami                    = data.aws_ami.amzlinux2.id
