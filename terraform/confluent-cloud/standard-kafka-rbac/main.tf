@@ -7,6 +7,12 @@ terraform {
   }
 }
 
+terraform {
+  backend "local" {
+    path = "terraform.tfstate"
+  }
+}
+
 provider "confluent" {
   cloud_api_key    = var.ccloud_api_key
   cloud_api_secret = var.ccloud_api_secret
@@ -15,7 +21,9 @@ provider "confluent" {
 # Update the config to use a cloud provider and region of your choice.
 # https://registry.terraform.io/providers/confluentinc/confluent/latest/docs/resources/confluent_kafka_cluster
 resource "confluent_kafka_cluster" "standard" {
-  display_name = var.ccloud_cluster_name
+  for_each = local.instance_set
+
+  display_name = "${var.ccloud_cluster_name}-${each.key}"
   availability = var.ccloud_cluster_azs
   cloud        = var.ccloud_cluster_provider
   region       = var.ccloud_cluster_region
@@ -25,32 +33,38 @@ resource "confluent_kafka_cluster" "standard" {
   }
 }
 
-// 'app-manager' service account is required in this configuration to create 'orders' topic and assign roles
-// to 'app-producer' and 'app-consumer' service accounts.
+## 'app-manager' service account is required in this configuration to create 'orders' topic and assign roles
+## to 'app-producer' and 'app-consumer' service accounts.
 resource "confluent_service_account" "app-manager" {
-  display_name = "app-manager"
+  for_each = local.instance_set
+
+  display_name = "app-manager-${each.key}"
   description  = "Service account to manage 'inventory' Kafka cluster"
 }
 
 resource "confluent_role_binding" "app-manager-kafka-cluster-admin" {
-  principal   = "User:${confluent_service_account.app-manager.id}"
+  for_each = local.instance_set
+
+  principal   = "User:${confluent_service_account.app-manager[each.key].id}"
   role_name   = "CloudClusterAdmin"
-  crn_pattern = confluent_kafka_cluster.standard.rbac_crn
+  crn_pattern = confluent_kafka_cluster.standard[each.key].rbac_crn
 }
 
 resource "confluent_api_key" "app-manager-kafka-api-key" {
-  display_name = "app-manager-kafka-api-key"
+  for_each = local.instance_set
+
+  display_name = "app-manager-kafka-api-key-${each.key}"
   description  = "Kafka API Key that is owned by 'app-manager' service account"
   owner {
-    id          = confluent_service_account.app-manager.id
-    api_version = confluent_service_account.app-manager.api_version
-    kind        = confluent_service_account.app-manager.kind
+    id          = confluent_service_account.app-manager[each.key].id
+    api_version = confluent_service_account.app-manager[each.key].api_version
+    kind        = confluent_service_account.app-manager[each.key].kind
   }
 
   managed_resource {
-    id          = confluent_kafka_cluster.standard.id
-    api_version = confluent_kafka_cluster.standard.api_version
-    kind        = confluent_kafka_cluster.standard.kind
+    id          = confluent_kafka_cluster.standard[each.key].id
+    api_version = confluent_kafka_cluster.standard[each.key].api_version
+    kind        = confluent_kafka_cluster.standard[each.key].kind
 
     environment {
       id = var.ccloud_environment_id
@@ -70,35 +84,42 @@ resource "confluent_api_key" "app-manager-kafka-api-key" {
 }
 
 resource "confluent_kafka_topic" "orders" {
+
+  for_each = local.instance_set
+
   kafka_cluster {
-    id = confluent_kafka_cluster.standard.id
+    id = confluent_kafka_cluster.standard[each.key].id
   }
-  topic_name    = "orders"
-  rest_endpoint = confluent_kafka_cluster.standard.rest_endpoint
+  topic_name    = "orders-${each.key}"
+  rest_endpoint = confluent_kafka_cluster.standard[each.key].rest_endpoint
   credentials {
-    key    = confluent_api_key.app-manager-kafka-api-key.id
-    secret = confluent_api_key.app-manager-kafka-api-key.secret
+    key    = confluent_api_key.app-manager-kafka-api-key[each.key].id
+    secret = confluent_api_key.app-manager-kafka-api-key[each.key].secret
   }
 }
 
 resource "confluent_service_account" "app-consumer" {
-  display_name = "app-consumer"
+  for_each = local.instance_set
+
+  display_name = "app-consumer-${each.key}"
   description  = "Service account to consume from 'orders' topic of 'inventory' Kafka cluster"
 }
 
 resource "confluent_api_key" "app-consumer-kafka-api-key" {
-  display_name = "app-consumer-kafka-api-key"
+  for_each = local.instance_set
+
+  display_name = "app-consumer-kafka-api-key-${each.key}"
   description  = "Kafka API Key that is owned by 'app-consumer' service account"
   owner {
-    id          = confluent_service_account.app-consumer.id
-    api_version = confluent_service_account.app-consumer.api_version
-    kind        = confluent_service_account.app-consumer.kind
+    id          = confluent_service_account.app-consumer[each.key].id
+    api_version = confluent_service_account.app-consumer[each.key].api_version
+    kind        = confluent_service_account.app-consumer[each.key].kind
   }
 
   managed_resource {
-    id          = confluent_kafka_cluster.standard.id
-    api_version = confluent_kafka_cluster.standard.api_version
-    kind        = confluent_kafka_cluster.standard.kind
+    id          = confluent_kafka_cluster.standard[each.key].id
+    api_version = confluent_kafka_cluster.standard[each.key].api_version
+    kind        = confluent_kafka_cluster.standard[each.key].kind
 
     environment {
       id = var.ccloud_environment_id
@@ -107,29 +128,35 @@ resource "confluent_api_key" "app-consumer-kafka-api-key" {
 }
 
 resource "confluent_service_account" "app-producer" {
-  display_name = "app-producer"
+  for_each = local.instance_set
+
+  display_name = "app-producer-${each.key}"
   description  = "Service account to produce to 'orders' topic of 'inventory' Kafka cluster"
 }
 
 resource "confluent_role_binding" "app-producer-developer-write" {
-  principal   = "User:${confluent_service_account.app-producer.id}"
+  for_each = local.instance_set
+
+  principal   = "User:${confluent_service_account.app-producer[each.key].id}"
   role_name   = "DeveloperWrite"
-  crn_pattern = "${confluent_kafka_cluster.standard.rbac_crn}/kafka=${confluent_kafka_cluster.standard.id}/topic=${confluent_kafka_topic.orders.topic_name}"
+  crn_pattern = "${confluent_kafka_cluster.standard[each.key].rbac_crn}/kafka=${confluent_kafka_cluster.standard[each.key].id}/topic=${confluent_kafka_topic.orders[each.key].topic_name}"
 }
 
 resource "confluent_api_key" "app-producer-kafka-api-key" {
-  display_name = "app-producer-kafka-api-key"
+
+  for_each = local.instance_set
+  display_name = "app-producer-kafka-api-key-${each.key}"
   description  = "Kafka API Key that is owned by 'app-producer' service account"
   owner {
-    id          = confluent_service_account.app-producer.id
-    api_version = confluent_service_account.app-producer.api_version
-    kind        = confluent_service_account.app-producer.kind
+    id          = confluent_service_account.app-producer[each.key].id
+    api_version = confluent_service_account.app-producer[each.key].api_version
+    kind        = confluent_service_account.app-producer[each.key].kind
   }
 
   managed_resource {
-    id          = confluent_kafka_cluster.standard.id
-    api_version = confluent_kafka_cluster.standard.api_version
-    kind        = confluent_kafka_cluster.standard.kind
+    id          = confluent_kafka_cluster.standard[each.key].id
+    api_version = confluent_kafka_cluster.standard[each.key].api_version
+    kind        = confluent_kafka_cluster.standard[each.key].kind
 
     environment {
       id = var.ccloud_environment_id
@@ -140,10 +167,13 @@ resource "confluent_api_key" "app-producer-kafka-api-key" {
 // Note that in order to consume from a topic, the principal of the consumer ('app-consumer' service account)
 // needs to be authorized to perform 'READ' operation on both Topic and Group resources:
 resource "confluent_role_binding" "app-producer-developer-read-from-topic" {
-  principal   = "User:${confluent_service_account.app-consumer.id}"
+  for_each = local.instance_set
+  principal   = "User:${confluent_service_account.app-consumer[each.key].id}"
   role_name   = "DeveloperRead"
-  crn_pattern = "${confluent_kafka_cluster.standard.rbac_crn}/kafka=${confluent_kafka_cluster.standard.id}/topic=${confluent_kafka_topic.orders.topic_name}"
+  crn_pattern = "${confluent_kafka_cluster.standard[each.key].rbac_crn}/kafka=${confluent_kafka_cluster.standard[each.key].id}/topic=${confluent_kafka_topic.orders[each.key].topic_name}"
 }
+
+###### Lab 2: below resource is commented out on purpose, this is the missing permission participants should identify and apply on their own
 
 #resource "confluent_role_binding" "app-producer-developer-read-from-group" {
 #  principal = "User:${confluent_service_account.app-consumer.id}"

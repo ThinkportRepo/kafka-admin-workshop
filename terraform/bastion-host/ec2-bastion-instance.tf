@@ -6,12 +6,17 @@ module "ec2_public" {
   for_each = local.instance_set
 
   name                   = "ccloud-bastion-host-${each.key}"
-  ami                    = data.aws_ami.amzlinux2.id
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
-  key_name               = var.instance_keypair
-  subnet_id              = module.vpc.public_subnets[each.value]
+  key_name               = "${var.instance_keypair}-${each.key}"
+  subnet_id              = module.vpc.public_subnets[each.key]
   vpc_security_group_ids = [module.public_bastion_sg.security_group_id]
   user_data              = "${file("scripts/init.sh")}"
   
   tags = local.common_tags
+
+  root_block_device = [{
+    volume_type = "gp2"
+    volume_size = 16
+  }]
 }
