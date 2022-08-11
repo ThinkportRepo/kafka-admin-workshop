@@ -4,6 +4,6 @@ locals {
     Project = "Kafka-Admin-Workshop"
     Owner   = "Timea Magyar"
   }
-  instance_set = toset(["0"])
+  instance_set = toset(["0", "1", "2"])
 
 } 
